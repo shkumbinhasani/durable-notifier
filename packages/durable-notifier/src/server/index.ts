@@ -94,7 +94,12 @@ export function createServerNotifier<M extends EventMap = EventMap>(
       const doUrl = new URL(request.url);
       doUrl.pathname = "/websocket";
       doUrl.search = "";
-      return stub.fetch(new Request(doUrl.toString(), request));
+      return stub.fetch(
+        new Request(doUrl.toString(), {
+          method: request.method,
+          headers: request.headers,
+        }),
+      );
     },
 
     sendToUser,
