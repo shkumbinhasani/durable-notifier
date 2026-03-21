@@ -3,6 +3,29 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Authenticated per-user realtime events on Cloudflare Workers with React hooks",
+  "author": "Shkumbin Hasani",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shkumbinhasani/durable-notifier.git",
+    "directory": "packages/durable-notifier"
+  },
+  "homepage": "https://github.com/shkumbinhasani/durable-notifier#readme",
+  "bugs": {
+    "url": "https://github.com/shkumbinhasani/durable-notifier/issues"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "durable-objects",
+    "websocket",
+    "realtime",
+    "react",
+    "hooks",
+    "events",
+    "push",
+    "notifications"
+  ],
   "exports": {
     "./server": {
       "types": "./dist/server/index.d.ts",
@@ -14,7 +37,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsup",
@@ -22,6 +47,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "eslint src/",
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
@@ -34,16 +60,16 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250312.0",
+    "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.0.0",
+    "jsdom": "^26.1.0",
     "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.5.0",
-    "vitest": "^3.1.0",
-    "@testing-library/react": "^16.0.0",
-    "@testing-library/react-hooks": "^8.0.0",
-    "react-dom": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "jsdom": "^26.1.0"
-  },
-  "license": "MIT"
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.1.0"
+  }
 }

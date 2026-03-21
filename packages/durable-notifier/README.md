@@ -141,6 +141,38 @@ await notifier.sendToUser(env, "user-123", {
 
 The `id` (UUID) and `ts` (timestamp) fields are auto-generated if not provided. Throws if delivery to the Durable Object fails.
 
+### `notifier.sendToUsers(env, userIds, event)`
+
+Send to multiple users concurrently. Uses `Promise.allSettled` — one failure won't block others.
+
+```ts
+const results = await notifier.sendToUsers(env, ["user-1", "user-2", "user-3"], {
+  type: "announcement",
+  data: { text: "Server maintenance at 2am" },
+});
+
+for (const r of results) {
+  if (r.status === "rejected") console.error(r.reason);
+}
+```
+
+### `notifier.disconnectUser(env, userId, reason?)`
+
+Close all of a user's active WebSocket connections.
+
+```ts
+await notifier.disconnectUser(env, "user-123", "Session expired");
+```
+
+### `notifier.getPresence(env, userId)`
+
+Check whether a user has any active connections.
+
+```ts
+const online = await notifier.getPresence(env, "user-123");
+// true if at least one WebSocket is open
+```
+
 ### `notifier.UserChannel`
 
 The Durable Object class. Re-export it from your worker entry point so wrangler can find it:
@@ -355,6 +387,36 @@ Send a test event:
 ```bash
 curl -X POST http://localhost:8787/send/test-user-1
 ```
+
+---
+
+## Sharing types between server and client
+
+Define your event map once and import it in both your worker and your React app:
+
+```ts
+// shared/events.ts
+export type AppEvents = {
+  "order.updated": { orderId: string; status: string };
+  "chat.message": { from: string; text: string };
+};
+```
+
+```ts
+// worker
+import type { AppEvents } from "../shared/events";
+const notifier = createServerNotifier<AppEvents>({ authenticate });
+```
+
+```ts
+// client
+import type { AppEvents } from "../shared/events";
+const notifier = createNotifier<AppEvents>("/ws");
+```
+
+This gives you compile-time safety across the entire pipeline — if you rename an event type or change its payload shape, TypeScript will catch mismatches on both sides.
+
+In a monorepo (like this repo's `examples/shared/events.ts`), just import directly. For separate repos, publish the type file as a shared package or copy the type definition.
 
 ---
 

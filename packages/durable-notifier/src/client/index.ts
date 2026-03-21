@@ -8,6 +8,30 @@ import type {
   NotifierOptions,
 } from "./types";
 
+/**
+ * Create a client-side notifier with React hooks for realtime events.
+ *
+ * Call this once at module scope. All hooks returned share a single WebSocket
+ * connection, multiplexing event subscriptions through an internal registry.
+ *
+ * @typeParam M - An {@link EventMap} describing all event types and their payloads.
+ * @param url - WebSocket URL (e.g. `"wss://my-worker.example.com/ws"`).
+ * @param options - Optional configuration (e.g. `{ lazy: false }`).
+ * @returns A {@link Notifier} with `useEvent`, `useStatus`, `useLastEvent`,
+ *          `close`, and `clearEventCache`.
+ *
+ * @example
+ * ```ts
+ * const notifier = createNotifier<MyEvents>("/ws");
+ *
+ * function Inbox() {
+ *   notifier.useEvent("inbox.invalidate", () => {
+ *     queryClient.invalidateQueries({ queryKey: ["inbox"] });
+ *   });
+ *   return <div>Status: {notifier.useStatus()}</div>;
+ * }
+ * ```
+ */
 export function createNotifier<M extends EventMap = EventMap>(
   url: string,
   options?: NotifierOptions,
@@ -49,9 +73,6 @@ export function createNotifier<M extends EventMap = EventMap>(
   function useLastEvent<T extends keyof M & string>(
     type?: T,
   ): WireEvent<T> | null {
-    // getLastEventSnapshot returns stored references directly (no cloning),
-    // so useSyncExternalStore's Object.is comparison works correctly —
-    // same event object = no re-render, new event object = re-render.
     return useSyncExternalStore(
       subscribeEvents,
       () => manager.getLastEventSnapshot(type) as WireEvent<T> | null,
