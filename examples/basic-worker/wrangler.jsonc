@@ -1,0 +1,19 @@
+{
+  "name": "basic-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-21",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "USER_CHANNEL",
+        "class_name": "UserChannel"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["UserChannel"]
+    }
+  ]
+}

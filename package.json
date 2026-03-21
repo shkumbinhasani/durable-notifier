@@ -1,0 +1,13 @@
+{
+  "name": "durable-notifier-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck"
+  },
+  "packageManager": "pnpm@9.1.4",
+  "devDependencies": {
+    "turbo": "^2.4.0"
+  }
+}
