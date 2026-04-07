@@ -1,6 +1,6 @@
 # durable-notifier
 
-Authenticated per-user realtime events on Cloudflare Workers. Tiny server API, React hooks on the client, Durable Objects hidden.
+Realtime events on Cloudflare Workers — per-user and per-channel. Tiny server API, React hooks on the client, Durable Objects hidden.
 
 ```
 npm install durable-notifier
@@ -197,19 +197,19 @@ function ChatRoom({ roomId }: { roomId: string }) {
 │  Client  │ ────────────────────────── │    Worker     │
 │ (React)  │         HTTP               │  (entrypoint) │
 └──────────┘                            └──────┬───────┘
-     ▲                                         │
-     │ events over existing WebSocket          │
-     │                                         ▼
-┌──────────────┐                        ┌──────────────┐
-│ UserChannel  │ ◄── sendToChannel ──── │   Channel    │
-│ (per user)   │     fans out to each   │ (per channel)│
-│              │     user DO            │ member list  │
-└──────────────┘                        └──────────────┘
+     ▲                                    │         │
+     │ events over existing WebSocket     │         │
+     │                                    ▼         ▼
+┌──────────────┐                   ┌──────────────────┐
+│ UserChannel  │                   │     Channel      │
+│ (per user)   │                   │  (per channel)   │
+│  WebSockets  │                   │   member list    │
+└──────────────┘                   └──────────────────┘
 ```
 
 1. Client subscribes to a channel via HTTP POST (auth runs server-side)
-2. The `Channel` DO stores the user ID in its member list
-3. When `sendToChannel` is called, it reads the member list and fans out to each user's `UserChannel` DO
+2. The Worker tells the `Channel` DO to store the user ID in its member list
+3. When `sendToChannel` is called, the Worker reads the member list from the Channel DO, then sends the event to each member's `UserChannel` DO
 4. Each `UserChannel` pushes the event to all of that user's WebSocket connections
 5. The event includes a `channel` field so the client knows where it came from
 
@@ -633,30 +633,29 @@ All hooks are safe to use during server-side rendering:
 ## Architecture
 
 ```
-┌──────────┐       upgrade        ┌──────────────┐
-│  Client  │ ──────────────────── │    Worker     │
-│ (React)  │   WebSocket          │  (entrypoint) │
-└──────────┘       ▲              └──────┬───────┘
-     │             │                     │ idFromName(userId)
-     │             │                     ▼
-     │             │              ┌──────────────┐
-     │             └───────────── │ UserChannel   │
-     │              fanout to     │ (Durable Obj) │
-     │              all sockets   └──────────────┘
-     │                                   ▲
-     │   POST /channels/subscribe        │ sendToChannel
-     │   ─────────────────────── ┌──────────────┐
-     └──────────────────────────►│   Channel     │
-              HTTP               │ (Durable Obj) │
-                                 │ member list   │
-                                 └──────────────┘
+┌──────────┐    WebSocket     ┌──────────────┐     ┌──────────────┐
+│  Client  │ ◄─────────────► │ UserChannel   │     │   Channel    │
+│ (React)  │   events         │ (per user DO) │     │(per chan. DO)│
+└─────┬────┘                  └──────▲───────┘     └──────▲───────┘
+      │                              │                     │
+      │ POST /channels/subscribe     │ fan out to each     │ get members
+      └─────────────────────────►┌───┴─────────────────────┴──┐
+                HTTP             │          Worker             │
+                                 │       (entrypoint)          │
+                                 └─────────────────────────────┘
+                                    sendToUser / sendToChannel
 ```
+
+**sendToUser flow:** Worker → UserChannel DO → WebSocket(s)
+
+**sendToChannel flow:** Worker → Channel DO (get members) → Worker → each UserChannel DO → WebSocket(s)
 
 - **One Durable Object per user** — derived from `idFromName(userId)`
 - **One Durable Object per channel** — derived from `idFromName(channelName)`, stores member list
+- **Worker coordinates everything** — the Channel DO is a membership store; the Worker reads members and fans out to UserChannel DOs
 - **Multi-tab/device fanout** — the UserChannel DO holds all active sockets for a user and broadcasts to each
 - **Auth at the edge** — unauthenticated requests are rejected before touching any DO
-- **Server-push only** — clients subscribe, the server sends. The WebSocket is not bidirectional for application messages.
+- **Server-push only** — clients subscribe, the server sends. The WebSocket is not bidirectional for application messages
 - **Single WebSocket per user** — channel subscriptions are managed via HTTP; events for all channels arrive over the one connection
 
 ---
