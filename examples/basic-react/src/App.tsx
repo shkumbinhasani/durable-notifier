@@ -34,8 +34,11 @@ window.WebSocket = class extends OriginalWebSocket {
 
 // Point this at your deployed worker URL in production
 const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8787/ws?userId=test-user-1";
+const CHANNEL_URL = import.meta.env.VITE_CHANNEL_URL ?? "http://localhost:8787/channels";
 
-const notifier = createNotifier<MyEvents>(WS_URL);
+const notifier = createNotifier<MyEvents>(WS_URL, {
+  channelEndpoint: CHANNEL_URL,
+});
 
 function OrderListener() {
   notifier.useEvent("order.updated", (data) => {
@@ -47,14 +50,24 @@ function OrderListener() {
 function ChatListener() {
   const lastMessage = notifier.useLastEvent("chat.message");
 
-  notifier.useEvent("chat.message", (data) => {
-    console.log("[ChatListener] chat.message:", data);
+  notifier.useEvent("chat.message", (data, event) => {
+    console.log("[ChatListener] chat.message:", data, "channel:", event.channel);
   });
 
   return (
     <div data-testid="chat-listener">
       <p>ChatListener: subscribed to chat.message</p>
       {lastMessage && <pre data-testid="last-chat">{JSON.stringify(lastMessage, null, 2)}</pre>}
+    </div>
+  );
+}
+
+function ChannelRoom({ channel }: { channel: string }) {
+  notifier.useChannel(channel);
+
+  return (
+    <div data-testid={`channel-${channel}`}>
+      <p>Subscribed to channel: {channel}</p>
     </div>
   );
 }
@@ -67,6 +80,8 @@ function StatusDisplay() {
 export function App() {
   const [showOrder, setShowOrder] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showChannel, setShowChannel] = useState(false);
+  const [channelName, setChannelName] = useState("general");
 
   return (
     <div style={{ fontFamily: "system-ui", padding: "2rem" }}>
@@ -81,14 +96,26 @@ export function App() {
         </button>{" "}
         <button data-testid="toggle-chat" onClick={() => setShowChat((v) => !v)}>
           {showChat ? "Unmount" : "Mount"} ChatListener
-        </button>
+        </button>{" "}
+        <button data-testid="toggle-channel" onClick={() => setShowChannel((v) => !v)}>
+          {showChannel ? "Leave" : "Join"} Channel
+        </button>{" "}
+        <input
+          data-testid="channel-input"
+          value={channelName}
+          onChange={(e) => setChannelName(e.target.value)}
+          placeholder="Channel name"
+        />
       </section>
 
       <section>
         <h2>Active Hooks</h2>
-        {!showOrder && !showChat && <p data-testid="no-hooks">No hooks mounted</p>}
+        {!showOrder && !showChat && !showChannel && (
+          <p data-testid="no-hooks">No hooks mounted</p>
+        )}
         {showOrder && <OrderListener />}
         {showChat && <ChatListener />}
+        {showChannel && <ChannelRoom channel={channelName} />}
       </section>
     </div>
   );

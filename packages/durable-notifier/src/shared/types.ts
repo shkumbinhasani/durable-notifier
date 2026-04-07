@@ -4,6 +4,8 @@ export interface WireEvent<T extends string = string> {
   data?: unknown;
   id?: string;
   ts?: number;
+  /** Channel name, present when the event was sent via a channel. */
+  channel?: string;
 }
 
 /**

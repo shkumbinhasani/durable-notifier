@@ -16,17 +16,20 @@ import type {
  *
  * @typeParam M - An {@link EventMap} describing all event types and their payloads.
  * @param url - WebSocket URL (e.g. `"wss://my-worker.example.com/ws"`).
- * @param options - Optional configuration (e.g. `{ lazy: false }`).
+ * @param options - Optional configuration (e.g. `{ lazy: false, channelEndpoint: "..." }`).
  * @returns A {@link Notifier} with `useEvent`, `useStatus`, `useLastEvent`,
- *          `close`, and `clearEventCache`.
+ *          `useChannel`, `subscribe`, `unsubscribe`, `close`, and `clearEventCache`.
  *
  * @example
  * ```ts
- * const notifier = createNotifier<MyEvents>("/ws");
+ * const notifier = createNotifier<MyEvents>("/ws", {
+ *   channelEndpoint: "/channels",
+ * });
  *
- * function Inbox() {
- *   notifier.useEvent("inbox.invalidate", () => {
- *     queryClient.invalidateQueries({ queryKey: ["inbox"] });
+ * function ChatRoom({ roomId }: { roomId: string }) {
+ *   notifier.useChannel(roomId);
+ *   notifier.useEvent("chat.message", (data) => {
+ *     console.log(data);
  *   });
  *   return <div>Status: {notifier.useStatus()}</div>;
  * }
@@ -36,7 +39,11 @@ export function createNotifier<M extends EventMap = EventMap>(
   url: string,
   options?: NotifierOptions,
 ): Notifier<M> {
-  const manager = new ConnectionManager(url, options?.lazy ?? true);
+  const manager = new ConnectionManager(url, {
+    lazy: options?.lazy ?? true,
+    channelEndpoint: options?.channelEndpoint,
+    getHeaders: options?.getHeaders,
+  });
 
   function useEvent<T extends keyof M & string>(
     type: T,
@@ -88,7 +95,33 @@ export function createNotifier<M extends EventMap = EventMap>(
     manager.clearEventCache();
   }
 
-  return { useEvent, useStatus, useLastEvent, close, clearEventCache };
+  async function subscribe(channel: string): Promise<void> {
+    return manager.subscribeChannel(channel);
+  }
+
+  async function unsubscribe(channel: string): Promise<void> {
+    return manager.unsubscribeChannel(channel);
+  }
+
+  function useChannel(channel: string): void {
+    useEffect(() => {
+      void manager.subscribeChannel(channel);
+      return () => {
+        void manager.unsubscribeChannel(channel);
+      };
+    }, [channel]);
+  }
+
+  return {
+    useEvent,
+    useStatus,
+    useLastEvent,
+    close,
+    clearEventCache,
+    subscribe,
+    unsubscribe,
+    useChannel,
+  };
 }
 
 export type { Notifier, NotifierOptions, EventHandler, ConnectionStatus } from "./types";

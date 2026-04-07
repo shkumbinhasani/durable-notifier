@@ -12,6 +12,12 @@ function hasWebSocket(): boolean {
   return typeof WebSocket !== "undefined";
 }
 
+export interface ConnectionManagerOptions {
+  lazy?: boolean;
+  channelEndpoint?: string;
+  getHeaders?: () => Record<string, string>;
+}
+
 export class ConnectionManager {
   private url: string;
   private ws: WebSocket | null = null;
@@ -44,11 +50,18 @@ export class ConnectionManager {
   // Prevents stale close/open events from triggering actions after disconnect.
   private generation = 0;
 
-  constructor(url: string, lazy: boolean = true) {
-    this.url = url;
-    this.lazy = lazy;
+  // Channel support
+  private channelEndpoint: string | undefined;
+  private getHeaders: (() => Record<string, string>) | undefined;
+  private channels = new Set<string>();
 
-    if (!lazy && hasWebSocket()) {
+  constructor(url: string, options: ConnectionManagerOptions = {}) {
+    this.url = url;
+    this.lazy = options.lazy ?? true;
+    this.channelEndpoint = options.channelEndpoint;
+    this.getHeaders = options.getHeaders;
+
+    if (!this.lazy && hasWebSocket()) {
       this.connect();
     }
   }
@@ -99,6 +112,7 @@ export class ConnectionManager {
     this.generation++;
     this.listeners.clear();
     this.subscriberCount = 0;
+    this.channels.clear();
     this.clearEventCache();
     this.setStatus("closed");
   }
@@ -135,6 +149,23 @@ export class ConnectionManager {
     return this.lastEvent;
   }
 
+  // --- Channel API ---
+
+  async subscribeChannel(channel: string): Promise<void> {
+    if (this.destroyed) return;
+    this.channels.add(channel);
+    if (this.status === "connected") {
+      await this.doChannelSubscribe(channel);
+    }
+  }
+
+  async unsubscribeChannel(channel: string): Promise<void> {
+    this.channels.delete(channel);
+    // Always send the HTTP unsubscribe regardless of WebSocket status,
+    // since channel membership is server-side state managed via HTTP.
+    await this.doChannelUnsubscribe(channel).catch(() => {});
+  }
+
   // --- Internal ---
 
   private shouldConnect(): boolean {
@@ -159,6 +190,7 @@ export class ConnectionManager {
       this.reconnectAttempt = 0;
       this.setStatus("connected");
       this.startPing();
+      this.resubscribeChannels();
     });
 
     ws.addEventListener("message", (event) => {
@@ -276,5 +308,51 @@ export class ConnectionManager {
     for (const cb of this.eventSubscribers) {
       cb();
     }
+  }
+
+  // --- Channel internals ---
+
+  private resubscribeChannels(): void {
+    for (const channel of this.channels) {
+      this.doChannelSubscribe(channel).catch(() => {});
+    }
+  }
+
+  private async doChannelSubscribe(channel: string): Promise<void> {
+    if (!this.channelEndpoint) {
+      throw new Error(
+        "durable-notifier: channelEndpoint not configured. " +
+          "Pass channelEndpoint in createNotifier options to use channels.",
+      );
+    }
+    const res = await fetch(`${this.channelEndpoint}/subscribe`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(this.getHeaders?.() ?? {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({ channel }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(
+        (body as { error?: string }).error ??
+          `Channel subscribe failed: ${res.status}`,
+      );
+    }
+  }
+
+  private async doChannelUnsubscribe(channel: string): Promise<void> {
+    if (!this.channelEndpoint) return;
+    await fetch(`${this.channelEndpoint}/unsubscribe`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(this.getHeaders?.() ?? {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({ channel }),
+    }).catch(() => {});
   }
 }

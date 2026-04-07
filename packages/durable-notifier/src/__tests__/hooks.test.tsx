@@ -1,10 +1,14 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { createNotifier } from "../client/index";
 import { instances, lastInstance, resetInstances } from "./mock-ws";
 
 beforeEach(() => {
   resetInstances();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 type TestEvents = {
@@ -161,6 +165,51 @@ describe("React hooks", () => {
 
       act(() => notifier.close());
       expect(screen.getByTestId("status").textContent).toBe("closed");
+    });
+  });
+
+  describe("useChannel", () => {
+    it("subscribes on mount and unsubscribes on unmount", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      );
+
+      const notifier = createNotifier<TestEvents>("ws://test", {
+        channelEndpoint: "http://test/channels",
+      });
+
+      function App({ channel }: { channel: string }) {
+        notifier.useEvent("chat.message", () => {});
+        notifier.useChannel(channel);
+        return <div data-testid="status">{notifier.useStatus()}</div>;
+      }
+
+      const { unmount } = render(<App channel="room-42" />);
+      act(() => lastInstance().simulateOpen());
+
+      // Wait for the subscribe fetch
+      await act(async () => {
+        await vi.waitFor(() => {
+          expect(fetchSpy).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      const [url] = fetchSpy.mock.calls[0];
+      expect(url).toBe("http://test/channels/subscribe");
+
+      unmount();
+
+      // Should have called unsubscribe
+      await act(async () => {
+        await vi.waitFor(() => {
+          expect(fetchSpy).toHaveBeenCalledTimes(2);
+        });
+      });
+
+      const [unsubUrl] = fetchSpy.mock.calls[1];
+      expect(unsubUrl).toBe("http://test/channels/unsubscribe");
+
+      fetchSpy.mockRestore();
     });
   });
 });
