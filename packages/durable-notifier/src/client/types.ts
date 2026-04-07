@@ -13,7 +13,7 @@ export type ConnectionStatus =
  *
  * @typeParam D - The typed payload for the event.
  * @param data - The event payload (typed when using an {@link EventMap}).
- * @param event - The full {@link WireEvent} envelope including `type`, `id`, and `ts`.
+ * @param event - The full {@link WireEvent} envelope including `type`, `id`, `ts`, and `channel`.
  */
 export type EventHandler<D = unknown> = (data: D, event: WireEvent) => void;
 
@@ -31,6 +31,24 @@ export interface NotifierOptions {
    * @default true
    */
   lazy?: boolean;
+
+  /**
+   * Base URL for channel subscribe/unsubscribe HTTP endpoints.
+   *
+   * When set, enables channel support. The client will POST to
+   * `${channelEndpoint}/subscribe` and `${channelEndpoint}/unsubscribe`.
+   *
+   * @example "https://my-worker.example.com/channels"
+   */
+  channelEndpoint?: string;
+
+  /**
+   * Return additional headers for channel HTTP requests.
+   *
+   * Useful for sending auth tokens (e.g. `Authorization: Bearer ...`).
+   * Cookies are sent automatically via `credentials: "include"`.
+   */
+  getHeaders?: () => Record<string, string>;
 }
 
 /**
@@ -97,4 +115,36 @@ export interface Notifier<M extends EventMap = EventMap> {
    * returning stale data from the previous session.
    */
   clearEventCache(): void;
+
+  /**
+   * Subscribe to a channel.
+   *
+   * Sends an HTTP request to the channel endpoint. The subscription is
+   * tracked and automatically re-established on reconnect.
+   *
+   * Requires `channelEndpoint` to be set in options.
+   *
+   * @param channel - The channel name to subscribe to.
+   */
+  subscribe(channel: string): Promise<void>;
+
+  /**
+   * Unsubscribe from a channel.
+   *
+   * Sends an HTTP request to the channel endpoint and removes the channel
+   * from the tracked set (will not re-subscribe on reconnect).
+   *
+   * @param channel - The channel name to unsubscribe from.
+   */
+  unsubscribe(channel: string): Promise<void>;
+
+  /**
+   * React hook: subscribe to a channel on mount, unsubscribe on unmount.
+   *
+   * Automatically re-subscribes on reconnect. The channel subscription
+   * is managed as part of the component lifecycle.
+   *
+   * @param channel - The channel name to subscribe to.
+   */
+  useChannel(channel: string): void;
 }

@@ -12,7 +12,9 @@
  * // client
  * import { createNotifier } from "durable-notifier/client";
  * import type { AppEvents } from "../shared/events";
- * const notifier = createNotifier<AppEvents>("/ws");
+ * const notifier = createNotifier<AppEvents>("/ws", {
+ *   channelEndpoint: "/channels",
+ * });
  * ```
  */
 export type AppEvents = {
